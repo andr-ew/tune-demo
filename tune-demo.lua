@@ -1,9 +1,10 @@
-include 'nest_/lib/nest/core'
-include 'nest_/lib/nest/norns'
-include 'nest_/lib/nest/grid'
-include 'nest_/lib/nest/txt'
+nest = include 'lib/nest/core'
+Key, Enc = include 'lib/nest/norns'
+Text = include 'lib/nest/text'
+Grid = include 'lib/nest/grid'
+of = include 'lib/nest/util/of'
 
-tune, tune_ = include 'tune_/lib/tune' 
+tune = include 'tune_/lib/tune' 
 tune.setup { presets = 8, scales = include 'tune_/lib/scales' }
 
 params:add_separator('tuning')
@@ -31,6 +32,82 @@ params:add {
     default = 0,
 }
 
+local App = {}
+
+function App.grid()
+    local _keymap = Grid.momentary()
+
+    local _scale_preset = Grid.number()
+    local _transpose = Grid.number()
+    local _octave = Grid.number()
+
+    return function()
+        _keymap{
+            x = { 1, 8 }, y = { 1, 8 },
+            lvl = function(_, x, y)
+                return 
+                    tune.is_tonic(x, y, params:get('scale_preset'), params:get('transpose')) 
+                    and { 4, 15 } or { 0, 15 }
+            end,
+            action = function(v, t, d, add, rem)
+                local k = add or rem
+                local id = params:get('voicing') == 2  and 0 or k.x + (k.y * 16)
+
+                local trans, oct, pre = params:get('transpose'), params:get('octave'), params:get('scale_preset')
+
+                local hz = 440 * tune.hz(k.x, k.y, trans, oct, pre)
+                local midi = tune.midi(k.x, k.y, trans, oct, pre)
+
+                if add then
+                    engine.start(id, hz)
+                    if midi then m:note_on(midi, vel or 1, 1) end
+                elseif rem then
+                    engine.stop(id) 
+                    if midi then m:note_off(midi, vel or 1, 1) end
+                end
+            end
+        }
+
+        _scale_preset{
+            x = { 9, 16 }, y = 1,
+            state = of.param('scale_preset')
+        }
+        _transpose{
+            x = { 9, 16 },
+            y = 7,
+            lvl = function(_, x) 
+                local iv = tune.get_intervals(params:get('scale_preset'))
+                local x = tune.wrap(x, 0, params:get('scale_preset'))
+                return (
+                    (iv[x] == 7 or iv[x] == 0)
+                ) and { 4, 15 } or { 0, 15 }
+            end,
+            state = of.param('transpose')
+        }
+        _octave{
+            x = { 9, 16 },
+            y = 8,
+            state = of.param('octave')
+        }
+    end
+end
+
+function App.norns()
+    return function()
+    end
+end
+
+local _app = {
+    grid = App.grid(),
+    norns = App.norns()
+}
+
+nest.connect_grid(_app.grid, grid.connect())
+nest.connect_enc(_app.norns)
+nest.connect_key(_app.norns)
+nest.connect_screen(_app.norns)
+
+--[[
 n = nest_ {
     voicing = _grid.toggle {
         x = 1, y = 1, lvl = { 4, 15 },
@@ -82,6 +159,7 @@ n = nest_ {
         y = 8
     } :param('octave')
 } :connect { g = grid.connect(), screen = screen, key = key, enc = enc }
+--]]
 
 
 params:add_separator()
@@ -90,6 +168,5 @@ polysub = require 'polysub'
 polysub.params()
 
 function init()
-    n:init()
     params:bang()
 end

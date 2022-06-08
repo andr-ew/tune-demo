@@ -1,0 +1,6 @@
+[submodule "lib/tune"]
+	path = lib/tune
+	url = https://github.com/andr-ew/tune
+[submodule "lib/nest"]
+	path = lib/nest
+	url = https://github.com/andr-ew/nest
