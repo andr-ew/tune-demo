@@ -4,8 +4,10 @@ Text = include 'lib/nest/text'
 Grid = include 'lib/nest/grid'
 of = include 'lib/nest/util/of'
 
-tune = include 'tune_/lib/tune' 
-tune.setup { presets = 8, scales = include 'tune_/lib/scales' }
+local preset_count = 8
+
+tune, Tune = include 'lib/tune/tune' 
+tune.setup { presets = preset_count, scales = include 'lib/tune/scales' }
 
 params:add_separator('tuning')
 
@@ -20,8 +22,10 @@ params:add {
 }
 
 params:add {
-    type='number', name='scale preset', id='scale_preset', min = 1, max = 8,
-    default = 1, action = function() redraw() end
+    type='number', name='scale preset', id='scale_preset', min = 1, max = preset_count,
+    default = 1, action = function()
+        nest.screen.make_dirty()
+    end
 }
 params:add {
     type='number', name='transpose', id='transpose', min = 0, max = 7,
@@ -38,6 +42,10 @@ function App.grid()
     local _keymap = Grid.momentary()
 
     local _scale_preset = Grid.number()
+
+    local _scale_degrees = Tune.grid.scale_degrees({ left = 9, top = 2 })
+    local _tonic = Tune.grid.tonic({ left = 9, top = 5 })
+
     local _transpose = Grid.number()
     local _octave = Grid.number()
 
@@ -72,6 +80,10 @@ function App.grid()
             x = { 9, 16 }, y = 1,
             state = of.param('scale_preset')
         }
+
+        _scale_degrees{ preset = params:get('scale_preset') }
+        _tonic{ preset = params:get('scale_preset') }
+
         _transpose{
             x = { 9, 16 },
             y = 7,
@@ -93,7 +105,12 @@ function App.grid()
 end
 
 function App.norns()
+    local _scale_degrees = Tune.norns.scale_degrees()
+    local _options = Tune.norns.options()
+
     return function()
+        _scale_degrees{ preset = params:get('scale_preset') }
+        _options{ preset = params:get('scale_preset') }
     end
 end
 
@@ -106,61 +123,6 @@ nest.connect_grid(_app.grid, grid.connect())
 nest.connect_enc(_app.norns)
 nest.connect_key(_app.norns)
 nest.connect_screen(_app.norns)
-
---[[
-n = nest_ {
-    voicing = _grid.toggle {
-        x = 1, y = 1, lvl = { 4, 15 },
-    } :param('voicing'), 
-    keyboard = _grid.momentary {
-        x = { 1, 8 }, y = { 2, 8 },
-        lvl = function(s, x, y)
-            return tune.is_tonic(x, y, params:get('scale_preset'), params:get('transpose')) and { 4, 15 } or { 0, 15 }
-        end,
-        action = function(s, v, t, d, add, rem)
-            local k = add or rem
-            local id = params:get('voicing') == 2  and 0 or k.x + (k.y * 16)
-
-            local trans, oct, pre = params:get('transpose'), params:get('octave'), params:get('scale_preset')
-
-            local hz = 440 * tune.hz(k.x, k.y, trans, oct, pre)
-            local midi = tune.midi(k.x, k.y, trans, oct, pre)
-
-            if add then
-                engine.start(id, hz)
-                if midi then m:note_on(midi, vel or 1, 1) end
-            elseif rem then
-                engine.stop(id) 
-                if midi then m:note_off(midi, vel or 1, 1) end
-            end
-        end
-    },
-    scale_preset = _grid.number {
-        x = { 9, 16 }, y = 1,
-    } :param('scale_preset'),
-    tune = tune_ {
-        left = 9, top = 2,
-    } :each(function(i, v) 
-        v.enabled = function() return i == params:get('scale_preset') end
-    end),
-    transpose = _grid.number {
-        x = { 9, 16 },
-        y = 7,
-        lvl = function(s, x) 
-            local iv = tune.get_intervals(params:get('scale_preset'))
-            local x = tune.wrap(x, 0, params:get('scale_preset'))
-            return (
-                (iv[x] == 7 or iv[x] == 0)
-            ) and { 4, 15 } or { 0, 15 }
-        end
-    } :param('transpose'),
-    octave = _grid.number {
-        x = { 9, 16 },
-        y = 8
-    } :param('octave')
-} :connect { g = grid.connect(), screen = screen, key = key, enc = enc }
---]]
-
 
 params:add_separator()
 engine.name = 'PolySub'
